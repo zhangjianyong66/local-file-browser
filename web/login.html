@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 · 本地文件浏览器</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/overflow-fix.css">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <div class="login-brand"><span class="brand-mark" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 10 8-6 8 6"/><path d="M6 9v10h12V9"/><path d="M10 19v-6h4v6"/></svg></span><span>本地文件浏览器</span></div>
+    <form id="login" class="login-card">
+      <div><p class="eyebrow">安全访问</p><h1>登录以继续</h1><p class="login-copy">输入访问密码，浏览本地项目文件。</p></div>
+      <label class="field-label" for="password">访问密码
+        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      </label>
+      <button class="button button-primary button-large" type="submit"><span>登录</span><span class="button-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></button>
+      <p id="error" class="form-error" role="alert" aria-live="assertive"></p>
+    </form>
+    <p class="login-footnote">仅限授权用户访问</p>
+  </main>
+  <script>
+    document.querySelector('#login').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button');
+      const error = document.querySelector('#error');
+      button.disabled = true;
+      button.classList.add('is-loading');
+      error.textContent = '';
+      try {
+        const response = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({password: form.password.value}) });
+        if (!response.ok) throw new Error('密码不正确，请重试。');
+        location = '/';
+      } catch (err) {
+        error.textContent = err.message || '登录失败，请稍后重试。';
+        form.password.focus();
+      } finally {
+        button.disabled = false;
+        button.classList.remove('is-loading');
+      }
+    });
+  </script>
+</body>
+</html>

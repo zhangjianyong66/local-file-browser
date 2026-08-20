@@ -1,0 +1,13 @@
+[Unit]
+Description=Local File Browser
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/project/local-file-browser
+ExecStart=%h/project/local-file-browser/local-file-browser -config %h/project/local-file-browser/config.json
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

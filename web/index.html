@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="安全浏览本地项目文件">
+  <title>本地文件浏览器</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/overflow-fix.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 10 8-6 8 6"/><path d="M6 9v10h12V9"/><path d="M10 19v-6h4v6"/></svg></span><strong>本地文件浏览器</strong></div>
+    <nav id="crumb" class="breadcrumbs" aria-label="目录路径"></nav>
+    <button id="logout" class="button button-ghost" type="button" title="退出登录">退出登录</button>
+  </header>
+  <main id="main-content" class="app-main">
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+    <section class="toolbar" aria-label="目录操作">
+      <div>
+        <p class="eyebrow">项目文件</p>
+        <h1 id="page-title">根目录</h1>
+      </div>
+      <label class="button button-primary upload-button" for="upload">
+        <span class="upload-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg></span><span>上传文件</span>
+        <input id="upload" type="file">
+      </label>
+    </section>
+    <div id="workspace" class="workspace">
+      <section id="listing-panel" class="listing-panel" aria-labelledby="listing-title">
+        <div class="section-heading">
+          <div><h2 id="listing-title">当前目录</h2><span id="entry-count" class="count"></span></div>
+          <span class="sort-hint">目录优先 · 名称排序</span>
+        </div>
+        <div class="list-head" aria-hidden="true"><span>名称</span><span>大小</span><span>修改时间</span><span>类型</span></div>
+        <div id="listing" class="file-list" aria-live="polite"></div>
+      </section>
+      <section id="details-panel" class="details-panel" aria-labelledby="details-title" tabindex="-1">
+        <div id="details" class="details-empty">
+          <div class="empty-icon" aria-hidden="true">◌</div>
+          <h2 id="details-title">选择一个文件</h2>
+          <p>从左侧目录选择文件，在这里查看信息和预览。</p>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

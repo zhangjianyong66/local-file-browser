@@ -1,0 +1,59 @@
+/* Keep long metadata and rendered documents inside the responsive detail pane. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.workspace,
+.listing-panel,
+.details-panel,
+.detail-header,
+.file-meta,
+.preview-area,
+.file-meta > div {
+  min-width: 0;
+}
+
+.details-panel,
+.preview-area {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.file-meta strong,
+.markdown-body,
+.markdown-body p,
+.markdown-body li,
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body blockquote,
+.markdown-body code {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown-body pre,
+.text-preview,
+.preview-area details pre {
+  max-width: 100%;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.media-preview,
+.pdf-preview {
+  max-width: 100%;
+}

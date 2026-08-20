@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Markdown 文件预览">
+  <title>Markdown 预览 · 本地文件浏览器</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/overflow-fix.css">
+  <style>
+    .reader-shell{width:min(960px,100%);margin:0 auto;padding:32px 24px 72px}
+    .reader-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:24px}
+    .reader-title{margin:0;overflow-wrap:anywhere;font-size:30px;line-height:1.25}
+    .reader-path{margin:8px 0 0;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+    .reader-actions{display:flex;flex:none;gap:8px}
+    .reader-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+    .reader-meta div{min-width:0}.reader-meta span{display:block;color:var(--muted);font-size:11px}.reader-meta strong{display:block;margin-top:2px;overflow-wrap:anywhere;font-size:13px}
+    .reader-content{padding:32px 40px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+    .reader-content .markdown-body{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+    .reader-content .markdown-body table{width:100%;display:table;table-layout:auto;border-collapse:collapse;overflow:visible}
+    .reader-content .markdown-body th,.reader-content .markdown-body td{padding:9px 12px;border:1px solid var(--border);text-align:left;overflow-wrap:anywhere}
+    .reader-content .markdown-body th{background:var(--surface-soft);font-weight:700}
+    .reader-content .markdown-body pre{white-space:pre;overflow:auto}
+    .reader-loading{display:grid;place-items:center;min-height:240px;color:var(--muted)}
+    @media(max-width:650px){.reader-shell{padding:20px 14px 48px}.reader-header{display:block}.reader-title{font-size:24px}.reader-actions{margin-top:16px}.reader-meta{grid-template-columns:1fr 1fr}.reader-content{padding:22px 18px}.reader-content .markdown-body table{display:block;overflow-x:auto;white-space:nowrap}}
+  </style>
+</head>
+<body>
+  <main class="reader-shell">
+    <div id="reader" class="reader-loading" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span>正在加载 Markdown…</span></div>
+  </main>
+  <script>
+    const reader = document.querySelector('#reader');
+    const path = new URLSearchParams(location.search).get('path') || '';
+    const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    const bytes = (size) => size < 1024 ? `${size} B` : size < 1048576 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1048576).toFixed(1)} MB`;
+    const date = (value) => new Date(value).toLocaleString('zh-CN', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    async function api(url) {
+      const response = await fetch(url);
+      if (response.status === 401) { location = '/login.html'; throw new Error('登录已过期'); }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || '请求失败，请稍后重试。');
+      return data;
+    }
+    async function render() {
+      try {
+        const info = await api(`/api/info?path=${encodeURIComponent(path)}`);
+        if (info.preview !== 'markdown') throw new Error('该文件不是可预览的 Markdown 文件。');
+        const preview = await api(`/api/preview?path=${encodeURIComponent(path)}`);
+        if (preview.truncated) {
+          reader.className = 'error-state';
+          reader.innerHTML = '<strong>文件超过 5 MiB</strong><span>请关闭此窗口并下载文件查看完整内容。</span>';
+          return;
+        }
+        reader.className = '';
+        reader.innerHTML = `<header class="reader-header"><div><p class="eyebrow">Markdown 预览</p><h1 class="reader-title">${esc(info.name)}</h1><p class="reader-path">${esc(info.path || '根目录')}</p></div><div class="reader-actions"><a class="button button-secondary" href="/api/download?path=${encodeURIComponent(path)}">↓ 下载</a><button class="button button-secondary" id="close-reader" type="button">关闭窗口</button></div></header><section class="reader-meta" aria-label="文件信息"><div><span>大小</span><strong>${bytes(info.size)}</strong></div><div><span>修改时间</span><strong>${date(info.modified)}</strong></div><div><span>字符数</span><strong>${preview.characters.toLocaleString()}</strong></div><div><span>行数</span><strong>${preview.lines.toLocaleString()}</strong></div></section><article class="reader-content"><div class="markdown-body">${preview.html}</div></article>`;
+        document.title = `${info.name} · Markdown 预览`;
+        document.querySelector('#close-reader').addEventListener('click', () => { window.close(); setTimeout(() => { if (!window.closed) location = '/'; }, 100); });
+      } catch (error) { reader.className = 'error-state'; reader.innerHTML = `<strong>Markdown 加载失败</strong><span>${esc(error.message)}</span><a class="button button-secondary" href="/">返回文件浏览器</a>`; }
+    }
+    render();
+  </script>
+</body>
+</html>
