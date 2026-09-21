@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/file-browser-contract.md","reason":"检查默认 root、listen、密码兼容性和安全边界"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行测试、vet、build 和脚本语法检查"}

@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/index.md","reason":"实现路径边界、认证和文件处理前读取后端规范"}
+{"file":".trellis/spec/frontend/index.md","reason":"实现内嵌 Web 界面前读取前端规范"}
