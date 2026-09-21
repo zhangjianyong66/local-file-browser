@@ -3,10 +3,3 @@ config.json
 *.log
 *.pid
 local-file-browser
-
-# Local AI workflow metadata
-.trellis/
-.agents/
-.codex/
-AGENTS.md
-.gitattributes
