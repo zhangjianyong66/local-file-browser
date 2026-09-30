@@ -273,3 +273,37 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: 目录路由优化与本地部署
+<!-- trellis-session: v=2 fp=db8646720e0441bf -->
+
+**Date**: 2026-09-30
+**Task**: 目录路由优化与本地部署
+**Branch**: `feat/web-directory-routing`
+
+### Summary
+
+实现目录URL恢复、浏览历史、登录返回与错误恢复，补充竞态保护；测试与浏览器验收通过。已更新用户级local-file-browser服务并验证8080登录、目录及新版脚本；旧程序备份位于/home/zhangjianyong/.local/state/local-file-browser-deploy.efwXQi/local-file-browser.previous。
+
+### Main Changes
+
+- 更新目录路由及登录返回，任务已归档，本地systemd服务部署完成
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c297e00` | fix(web): 刷新保留目录并同步浏览历史 |
+
+### Testing
+
+- [OK] Go竞态测试、静态检查、构建、9项Node回归及真实浏览器验收通过；部署后认证与目录请求返回200
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无待办；未推送远程

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
-- **Last Active**: 2026-09-21
+- **Total Sessions**: 11
+- **Last Active**: 2026-09-30
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~275 | Active |
+| `journal-1.md` | ~309 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-09-30 | 目录路由优化与本地部署 | `c297e00` | `feat/web-directory-routing` |
 | 10 | 2026-09-21 | 清理 Git 忽略项 | `4600d08` | `main` |
 | 9 | 2026-09-21 | 完成 Trellis 项目规范初始化 | - | `main` |
 | 8 | 2026-08-20 | 公开发布本地文件浏览器 | `649b9b6` | `main` |
