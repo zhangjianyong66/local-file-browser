@@ -21,6 +21,18 @@
     <p class="login-footnote">仅限授权用户访问</p>
   </main>
   <script>
+    function returnDirectoryURL() {
+      const value = new URL(location.href).searchParams.get('return') || '/';
+      try {
+        if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return '/';
+        const destination = new URL(value, location.origin);
+        if (destination.origin !== location.origin || !['/', '/index.html'].includes(destination.pathname)) return '/';
+        const url = new URL('/', location.origin);
+        const path = destination.searchParams.get('path');
+        if (path) url.searchParams.set('path', path);
+        return url.pathname + url.search;
+      } catch { return '/'; }
+    }
     document.querySelector('#login').addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -32,7 +44,7 @@
       try {
         const response = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({password: form.password.value}) });
         if (!response.ok) throw new Error('密码不正确，请重试。');
-        location = '/';
+        location.replace(returnDirectoryURL());
       } catch (err) {
         error.textContent = err.message || '登录失败，请稍后重试。';
         form.password.focus();

@@ -18,6 +18,7 @@ This project serves local files through an authenticated HTTP interface. Every r
 
 - Runtime requires `FILE_BROWSER_PASSWORD` or `-password`; `-root` defaults to `~/project`; `-listen` defaults to `127.0.0.1:8080`. A `root` value supplied through `config.json` must be absolute: JSON values do not perform shell-style `~` expansion.
 - Successful login issues `file_browser_session` as an HttpOnly, SameSite=Lax cookie. Set `-cookie-secure` when the browser reaches the service over HTTPS.
+- Unauthenticated `/` and `/index.html` requests redirect to `/login.html?return=<encoded-directory-URL>`; the directory URL is rebuilt from only the `path` query parameter. Other protected static pages redirect to `/login.html`. Login accepts only a same-origin root or index return entry and rebuilds its directory URL; arbitrary destinations must never be accepted.
 - API failures use JSON `{ "error": "<message>" }`.
 - Directory entries contain `name`, `path`, `dir`, `size`, `modified`, and `mime`; files are directories first, then name ascending.
 - Text previews are limited to 5 MiB. `.txt` and `.md` files are supported when their content passes the UTF-8/control-character check; UTF-8 text is reported with `content`, `size`, `characters`, `lines`, `mime`, and `truncated`.
@@ -27,7 +28,7 @@ This project serves local files through an authenticated HTTP interface. Every r
 
 | Condition | Response |
 | --- | --- |
-| Missing or invalid session | `401` for APIs; redirect to `/login.html` for pages |
+| Missing or invalid session | `401` for APIs; directory pages redirect to login carrying their directory; other protected pages redirect to `/login.html` |
 | Path outside the configured root or unsafe link | `403` |
 | Missing path | `404` |
 | Directory passed to a file endpoint | `400` |
@@ -45,6 +46,7 @@ This project serves local files through an authenticated HTTP interface. Every r
 ## 6. Tests Required
 
 - Verify unauthenticated API and page behavior, plus login page static assets.
+- Verify root/index login redirects preserve special-character directory paths and drop unrelated query parameters; frontend tests reject external or non-directory return destinations.
 - Verify `..`, absolute paths, unsafe symlinks, and replacement of the configured root cannot read outside files.
 - Verify an existing upload name returns `409` without changing the original file.
 - Verify small UTF-8 text and configuration files preview, while binary data and files over 5 MiB do not expose full content.

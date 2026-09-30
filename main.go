@@ -14,6 +14,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -243,7 +244,7 @@ func (s *server) routes() http.Handler {
 func (s *server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/login", "/login.html", "/style.css":
+		case "/api/login", "/login.html", "/style.css", "/overflow-fix.css":
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -256,7 +257,15 @@ func (s *server) requireAuth(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		http.Redirect(w, r, "/login.html", http.StatusSeeOther)
+		loginURL := "/login.html"
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			directoryURL := "/"
+			if directory := r.URL.Query().Get("path"); directory != "" {
+				directoryURL += "?" + url.Values{"path": {directory}}.Encode()
+			}
+			loginURL += "?" + url.Values{"return": {directoryURL}}.Encode()
+		}
+		http.Redirect(w, r, loginURL, http.StatusSeeOther)
 	})
 }
 

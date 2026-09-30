@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,7 +124,7 @@ func TestStaticAppIsProtectedAndServedAfterLogin(t *testing.T) {
 	defer ts.Close()
 	c := clientFor(t, ts)
 	r := get(t, c, ts.URL+"/")
-	if r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/login.html" {
+	if r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/login.html?return=%2F" {
 		t.Fatalf("unexpected unauthenticated response: %d %q", r.StatusCode, r.Header.Get("Location"))
 	}
 	r.Body.Close()
@@ -159,6 +160,29 @@ func TestStaticAppIsProtectedAndServedAfterLogin(t *testing.T) {
 	body, err = io.ReadAll(r.Body)
 	if err != nil || r.StatusCode != http.StatusOK || !strings.Contains(string(body), "Markdown 预览") {
 		t.Fatalf("markdown reader response: %d %v", r.StatusCode, err)
+	}
+}
+
+func TestDirectoryLoginReturn(t *testing.T) {
+	s, _ := testServer(t)
+	for _, page := range []string{"/", "/index.html"} {
+		directory := "中文 空格#%/子目录"
+		request := httptest.NewRequest(http.MethodGet, page+"?"+url.Values{"path": {directory}, "unused": {"ignored"}}.Encode(), nil)
+		response := httptest.NewRecorder()
+		s.routes().ServeHTTP(response, request)
+		redirect, err := url.Parse(response.Header().Get("Location"))
+		if err != nil || response.Code != http.StatusSeeOther || redirect.Path != "/login.html" {
+			t.Fatalf("unexpected login redirect: %d %q %v", response.Code, response.Header().Get("Location"), err)
+		}
+		returned, err := url.Parse(redirect.Query().Get("return"))
+		if err != nil || returned.Path != "/" || returned.Query().Get("path") != directory || returned.Query().Has("unused") {
+			t.Fatalf("unexpected return directory: %q %v", redirect.Query().Get("return"), err)
+		}
+	}
+	response := httptest.NewRecorder()
+	s.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/overflow-fix.css", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("login overflow stylesheet status %d", response.Code)
 	}
 }
 func TestRejectsOutsideSymlink(t *testing.T) {
