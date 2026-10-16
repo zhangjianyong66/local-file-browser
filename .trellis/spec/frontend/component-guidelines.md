@@ -12,3 +12,10 @@ in the markdown preview container.
 Prefer native controls, labels, headings, links, and buttons. Preserve visible
 focus states, `aria-live` messaging, skip navigation, useful media attributes,
 and keyboard-operable actions. Keep styles in `web/style.css`.
+
+HTML/HTM file clicks open `/html.html?path=<encoded-path>` in a new tab/window
+using `noopener,noreferrer`. The preview shell provides a download link and loads
+the server-issued preview URL in an iframe with `sandbox="allow-scripts"` and
+`referrerpolicy="no-referrer"`; never grant `allow-same-origin` or insert raw
+HTML into the shell. A null return from `window.open` with `noopener` does not
+prove that a popup was blocked, so do not show an error based on that alone.

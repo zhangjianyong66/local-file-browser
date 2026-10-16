@@ -307,3 +307,29 @@
 ### Next Steps
 
 - 无待办；未推送远程
+
+
+## Session 12: HTML 网页预览实现与本地部署
+<!-- trellis-session: v=2 fp=ed41dcea35b008a5 -->
+
+**Date**: 2026-10-16
+**Task**: HTML 网页预览实现与本地部署
+**Branch**: `feat/html-page-preview`
+
+### Summary
+
+支持 HTML/HTM 新窗口渲染和相对资源，完成权限隔离、自动测试和浏览器验收；已编译更新本地用户服务并验证，保留原二进制备份。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1ca91b6` | feat(web): 支持 HTML 文件新窗口网页预览 |
+
+### Testing
+
+- [OK] Go race/vet/build、前端 10 项测试、真实浏览器与部署接口验证通过
+
+### Status
+
+[OK] **Completed**

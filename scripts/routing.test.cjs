@@ -10,6 +10,7 @@ function harness(source = app, entry = '/') {
   const pending = [];
   const events = {};
   const historyCalls = [];
+  const opened = [];
   const location = {
     href: `http://localhost${entry}`, origin: 'http://localhost',
     assign(value) { this.redirect = value; }, replace(value) { this.redirect = value; },
@@ -25,14 +26,14 @@ function harness(source = app, entry = '/') {
   const context = vm.createContext({
     URL, location, document: { querySelector: node },
     FormData: class { append() {} },
-    window: { addEventListener(type, listener) { events[type] = listener; } },
+    window: { open(...args) { opened.push(args); return null; }, addEventListener(type, listener) { events[type] = listener; } },
     history: Object.fromEntries(['pushState', 'replaceState'].map((method) => [method, (_, __, value) => {
       historyCalls.push([method, value]); location.href = new URL(value, location.origin).href;
     }])),
     fetch: (url) => new Promise((resolve) => pending.push({ url, resolve })),
   });
   vm.runInContext(source, context);
-  return { context, node, pending, events, historyCalls, location,
+  return { context, node, pending, events, historyCalls, location, opened,
     run: (code) => vm.runInContext(code, context),
     async respond(index, data, status = 200) {
       pending[index].resolve({ status, ok: status >= 200 && status < 300, json: async () => data });
@@ -165,4 +166,32 @@ test('login only returns to local directory entries and rebuilds path', () => {
   assert.equal(returned.searchParams.get('path'), path);
   assert.equal(returned.searchParams.has('unused'), false);
   assert.equal(returned.hash, '');
+});
+
+
+test('HTML and Markdown clicks open isolated new windows with encoded paths', async () => {
+  for (const [name, page] of [['PAGE.HTML', 'html'], ['page.HtM', 'html'], ['readme.MD', 'markdown']]) {
+    const h = harness();
+    await h.respond(0, { path: '', entries: [] });
+    const path = `中文 空格#%?/子目录/${name}`;
+    const row = {
+      dataset: { path, dir: 'false' },
+      querySelector: () => ({ textContent: name }),
+      addEventListener(_, listener) { this.click = listener; },
+    };
+    h.node('#listing').querySelectorAll = () => [row];
+    h.run('renderList([])');
+    // A nonempty list registers the actual row click handler.
+    h.run(`renderList([{ path: ${JSON.stringify(path)}, name: ${JSON.stringify(name)}, dir: false, size: 1 }])`);
+    row.click({ preventDefault() {} });
+    assert.equal(h.opened.length, 1);
+    const [address, target, features] = h.opened[0];
+    const url = new URL(address, h.location.origin);
+    assert.equal(url.pathname, `/${page}.html`);
+    assert.equal(url.searchParams.get('path'), path);
+    assert.equal(target, '_blank');
+    assert.equal(features, 'noopener,noreferrer');
+    assert.equal(h.pending.length, 1, 'click must not fetch text preview');
+    assert.equal(h.node('#message').textContent, '', 'noopener returning null is not a blocked popup');
+  }
 });

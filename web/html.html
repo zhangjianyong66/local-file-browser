@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>网页预览</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="html-preview-page">
+  <header class="html-preview-toolbar">
+    <h1 id="title">网页预览</h1>
+    <a class="button button-secondary" id="download">下载文件</a>
+  </header>
+  <p id="status" role="status">正在加载网页…</p>
+  <iframe id="page" title="HTML 网页内容" sandbox="allow-scripts" referrerpolicy="no-referrer" hidden></iframe>
+  <script src="/html.js"></script>
+</body>
+</html>
