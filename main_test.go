@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func testServer(t *testing.T) (*server, string) {
@@ -432,4 +433,212 @@ func TestCleanRelative(t *testing.T) {
 	if got, err := cleanRelative("a/../b"); err != nil || got != "b" {
 		t.Fatalf("got %q %v", got, err)
 	}
+}
+
+func TestHTMLPreviewResourcesAndIsolation(t *testing.T) {
+	s, root := testServer(t)
+	dir := "中文 空格#%?"
+	if err := os.Mkdir(filepath.Join(root, dir), 0700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		dir + "/PAGE.HTM":  `<link rel="stylesheet" href="style.css"><script src="app.js"></script><img src="image.svg">`,
+		dir + "/style.css": "body { color: red; }", dir + "/app.js": "document.title = 'loaded';", dir + "/image.svg": `<svg xmlns="http://www.w3.org/2000/svg"/>`,
+	}
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ts := httptest.NewServer(s.routes())
+	defer ts.Close()
+	c := clientFor(t, ts)
+	endpoint := ts.URL + "/api/html-preview?" + url.Values{"path": {dir + "/PAGE.HTM"}}.Encode()
+	r := get(t, c, endpoint)
+	if r.StatusCode != 401 {
+		t.Fatalf("unauthenticated preview: %d", r.StatusCode)
+	}
+	r.Body.Close()
+	login(t, c, ts.URL)
+	r = get(t, c, endpoint)
+	var result struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	r.Body.Close()
+	previewURL, err := url.Parse(ts.URL + result.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(previewURL.Path, dir+"/PAGE.HTM") {
+		t.Fatalf("path round trip: %s", previewURL.Path)
+	}
+	cookie := c.Jar.Cookies(previewURL)[0]
+	if strings.Contains(result.URL, cookie.Value) {
+		t.Fatal("preview URL leaked management session")
+	}
+	for name, wantType := range map[string]string{"PAGE.HTM": "text/html", "style.css": "text/css", "app.js": "javascript", "image.svg": "image/svg+xml"} {
+		u := previewURL.ResolveReference(&url.URL{Path: name})
+		// An opaque sandbox cannot rely on login cookies: resources use only the read token.
+		r = get(t, http.DefaultClient, u.String())
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		if r.StatusCode != 200 || string(body) != files[dir+"/"+name] {
+			t.Fatalf("resource %s: status %d, body %s", name, r.StatusCode, body)
+		}
+		if !strings.Contains(r.Header.Get("Content-Type"), wantType) {
+			t.Fatalf("MIME %s: %s", name, r.Header.Get("Content-Type"))
+		}
+		csp := r.Header.Get("Content-Security-Policy")
+		if !strings.Contains(csp, "sandbox allow-scripts;") || strings.Contains(csp, "allow-same-origin") || !strings.Contains(csp, "connect-src 'none'") || !strings.Contains(csp, "form-action 'none'") {
+			t.Fatalf("unsafe CSP: %s", csp)
+		}
+		if r.Header.Get("X-Content-Type-Options") != "nosniff" || r.Header.Get("Referrer-Policy") != "no-referrer" || r.Header.Get("Cache-Control") != "no-store" {
+			t.Fatal("missing resource protection headers")
+		}
+	}
+	// Preview token is not a login cookie and cannot read management APIs.
+	token := strings.Split(strings.TrimPrefix(result.URL, "/html-files/"), "/")[0]
+	req, _ := http.NewRequest("GET", ts.URL+"/api/list", nil)
+	req.AddCookie(&http.Cookie{Name: "file_browser_session", Value: token})
+	r, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.StatusCode != 401 {
+		t.Fatalf("preview token accepted by API: %d", r.StatusCode)
+	}
+	r.Body.Close()
+	for _, route := range []string{"/api/list", "/api/logout", "/api/html-preview?path=x"} {
+		req, _ := http.NewRequest("GET", ts.URL+route, nil)
+		req.Header.Set("Origin", "null")
+		r, err = c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != 403 {
+			t.Fatalf("opaque origin reached %s: %d", route, r.StatusCode)
+		}
+		r.Body.Close()
+	}
+	// Navigation from another site must not authorize an API, while ordinary
+	// links to the browser UI remain usable with a valid login.
+	for _, tc := range []struct {
+		path   string
+		status int
+	}{{"/api/list", 403}, {"/api/download?path=" + url.QueryEscape(dir+"/PAGE.HTM"), 403}, {"/", 200}} {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
+		req.Header.Set("Sec-Fetch-Site", "cross-site")
+		r, err = c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		if r.StatusCode != tc.status {
+			t.Fatalf("cross-site navigation %s: %d, want %d", tc.path, r.StatusCode, tc.status)
+		}
+	}
+	r, err = c.Post(ts.URL+"/api/logout", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body.Close()
+	r = get(t, http.DefaultClient, previewURL.String())
+	if r.StatusCode != 401 {
+		t.Fatalf("preview survived logout: %d", r.StatusCode)
+	}
+	r.Body.Close()
+}
+
+func TestHTMLPreviewPathAndMethodBoundaries(t *testing.T) {
+	s, root := testServer(t)
+	if err := os.WriteFile(filepath.Join(root, "small.txt"), []byte("text"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "page.html"), []byte("<h1>hello</h1>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.html"), []byte("secret"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.routes())
+	defer ts.Close()
+	c := clientFor(t, ts)
+	login(t, c, ts.URL)
+	r := get(t, c, ts.URL+"/api/html-preview?path=page.html")
+	var result struct {
+		URL string `json:"url"`
+	}
+	json.NewDecoder(r.Body).Decode(&result)
+	r.Body.Close()
+	// Resource queries never select another file, and HEAD carries no body.
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		req, _ := http.NewRequest(method, ts.URL+result.URL+"?path=missing.html&v=1", nil)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(r.Body)
+		r.Body.Close()
+		if err != nil || r.StatusCode != 200 || (method == http.MethodHead && len(body) != 0) || (method == http.MethodGet && string(body) != "<h1>hello</h1>") {
+			t.Fatalf("resource %s with query: status %d, body %q, error %v", method, r.StatusCode, body, err)
+		}
+	}
+	for _, tc := range []struct {
+		path   string
+		status int
+	}{{"/html-files/invalid/page.html", 401}, {"/html-files/missing", 401}, {"/api/html-preview?path=small.txt", 415}} {
+		r = get(t, c, ts.URL+tc.path)
+		r.Body.Close()
+		if r.StatusCode != tc.status {
+			t.Fatalf("preview boundary %s: %d, want %d", tc.path, r.StatusCode, tc.status)
+		}
+	}
+	prefix := result.URL[:strings.LastIndex(result.URL, "/")+1]
+	for _, tc := range []struct {
+		path   string
+		status int
+	}{
+		{"escape/secret.html", 403}, {"%2e%2e%2fsecret.html", 403}, {"%2fsecret.html", 403}, {"missing.html", 404}, {".", 400},
+	} {
+		// Encoded dots keep ServeMux from normalizing before root-bound validation.
+		resource := prefix + tc.path
+		if tc.path == "." {
+			resource = prefix + "%2e"
+		}
+		r = get(t, http.DefaultClient, ts.URL+resource)
+		if r.StatusCode != tc.status {
+			t.Errorf("resource %s: %d, want %d", tc.path, r.StatusCode, tc.status)
+		}
+		r.Body.Close()
+	}
+	req, _ := http.NewRequest("POST", ts.URL+result.URL, strings.NewReader("changed"))
+	r, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.StatusCode != 405 {
+		t.Fatalf("resource POST: %d", r.StatusCode)
+	}
+	r.Body.Close()
+	data, _ := os.ReadFile(filepath.Join(root, "page.html"))
+	if string(data) != "<h1>hello</h1>" {
+		t.Fatal("preview wrote file")
+	}
+	s.sessions.mu.Lock()
+	for id := range s.sessions.sessions {
+		s.sessions.sessions[id] = time.Now().Add(-time.Minute)
+	}
+	s.sessions.mu.Unlock()
+	r = get(t, http.DefaultClient, ts.URL+result.URL)
+	if r.StatusCode != 401 {
+		t.Fatalf("expired session preview: %d", r.StatusCode)
+	}
+	r.Body.Close()
 }

@@ -53,8 +53,9 @@ type fileConfig struct {
 }
 
 type sessionStore struct {
-	mu       sync.Mutex
-	sessions map[string]time.Time
+	mu            sync.Mutex
+	sessions      map[string]time.Time
+	previewTokens map[string]string // Read-only preview token -> login session; never accepted by management APIs.
 }
 
 type server struct {
@@ -220,7 +221,7 @@ func newServer(cfg config) (*server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open root: %w", err)
 	}
-	return &server{root: root, rootFS: rootFS, password: cfg.password, cookieSecure: cfg.cookieSecure, sessions: sessionStore{sessions: make(map[string]time.Time)}}, nil
+	return &server{root: root, rootFS: rootFS, password: cfg.password, cookieSecure: cfg.cookieSecure, sessions: sessionStore{sessions: make(map[string]time.Time), previewTokens: make(map[string]string)}}, nil
 }
 
 func (s *server) routes() http.Handler {
@@ -233,6 +234,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/api/download", s.download)
 	mux.HandleFunc("/api/media", s.media)
 	mux.HandleFunc("/api/upload", s.upload)
+	mux.HandleFunc("/api/html-preview", s.htmlPreview)
+	mux.HandleFunc("/html-files/", s.htmlResource)
 	staticFiles, err := fs.Sub(webFS, "web")
 	if err != nil {
 		panic("embedded web assets are missing: " + err.Error())
@@ -243,6 +246,16 @@ func (s *server) routes() http.Handler {
 
 func (s *server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Sandboxed preview documents have an opaque origin. Do not let them use
+		// cookies to reach management APIs, including navigation.
+		if strings.HasPrefix(r.URL.Path, "/api/") && (r.Header.Get("Origin") == "null" || r.Header.Get("Sec-Fetch-Site") == "cross-site") {
+			writeError(w, http.StatusForbidden, "cross-site access denied")
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/html-files/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		switch r.URL.Path {
 		case "/api/login", "/login.html", "/style.css", "/overflow-fix.css":
 			next.ServeHTTP(w, r)
@@ -292,14 +305,15 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid password")
 		return
 	}
-	b := make([]byte, 32)
+	b := make([]byte, 64)
 	if _, err := rand.Read(b); err != nil {
 		writeError(w, 500, "create session")
 		return
 	}
-	id := hex.EncodeToString(b)
+	id := hex.EncodeToString(b[:32])
 	s.sessions.mu.Lock()
 	s.sessions.sessions[id] = time.Now().Add(sessionLifetime)
+	s.sessions.previewTokens[hex.EncodeToString(b[32:])] = id
 	s.sessions.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: "file_browser_session", Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure, MaxAge: int(sessionLifetime.Seconds())})
 	writeJSON(w, 200, map[string]bool{"ok": true})
@@ -313,6 +327,11 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("file_browser_session"); err == nil {
 		s.sessions.mu.Lock()
 		delete(s.sessions.sessions, c.Value)
+		for token, session := range s.sessions.previewTokens {
+			if session == c.Value {
+				delete(s.sessions.previewTokens, token)
+			}
+		}
 		s.sessions.mu.Unlock()
 	}
 	http.SetCookie(w, &http.Cookie{Name: "file_browser_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.cookieSecure})
@@ -584,6 +603,77 @@ func (s *server) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", mimeFor(info.Name(), false))
+	w.Header().Set("Content-Disposition", "inline")
+	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+}
+
+// htmlPreview issues a read-only URL, separate from the HttpOnly login cookie.
+// Opaque sandbox origins cannot reliably send SameSite cookies for subresources.
+func (s *server) htmlPreview(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	file, info, ok := s.fileForRequest(w, r)
+	if !ok {
+		return
+	}
+	defer file.Close()
+	ext := strings.ToLower(filepath.Ext(info.Name()))
+	if ext != ".html" && ext != ".htm" {
+		writeError(w, 415, "HTML preview unavailable")
+		return
+	}
+	cookie, _ := r.Cookie("file_browser_session") // requireAuth already validated it.
+	s.sessions.mu.Lock()
+	token := ""
+	for candidate, session := range s.sessions.previewTokens {
+		if expiry, exists := s.sessions.sessions[session]; !exists || time.Now().After(expiry) {
+			delete(s.sessions.previewTokens, candidate)
+		} else if session == cookie.Value {
+			token = candidate
+		}
+	}
+	s.sessions.mu.Unlock()
+	if token == "" {
+		writeError(w, 401, "authentication required")
+		return
+	}
+	rel, _ := cleanRelative(requestPath(r)) // fileForRequest validated the path.
+	parts := strings.Split(rel, "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	writeJSON(w, 200, map[string]string{"url": "/html-files/" + token + "/" + strings.Join(parts, "/")})
+}
+
+func (s *server) htmlResource(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// The iframe sandbox remains active across navigation; this header also
+	// isolates documents when a preview resource URL is opened directly.
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; media-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'")
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeError(w, 405, "GET or HEAD required")
+		return
+	}
+	token, relative, found := strings.Cut(strings.TrimPrefix(r.URL.Path, "/html-files/"), "/")
+	s.sessions.mu.Lock()
+	session := s.sessions.previewTokens[token]
+	s.sessions.mu.Unlock()
+	if !found || session == "" || !s.validSession(session) {
+		writeError(w, 401, "authentication required")
+		return
+	}
+	// Reuse the file endpoint's root-bound open and directory rejection.
+	request := r.Clone(r.Context())
+	request.Method = http.MethodGet
+	request.URL.RawQuery = url.Values{"path": {relative}}.Encode()
+	file, info, ok := s.fileForRequest(w, request)
+	if !ok {
+		return
+	}
+	defer file.Close()
+	contentType := mimeFor(strings.ToLower(info.Name()), false)
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", "inline")
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }

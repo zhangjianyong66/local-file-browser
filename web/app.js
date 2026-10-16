@@ -60,9 +60,9 @@ function renderList(entries) {
     event.preventDefault();
     if (row.dataset.dir === 'true') { load(row.dataset.path); return; }
     const name = row.querySelector('.file-label').textContent;
-    if (name.toLowerCase().endsWith('.md')) {
-      const previewWindow = window.open(`/markdown.html?path=${enc(row.dataset.path)}`, '_blank', 'noopener,noreferrer');
-      if (!previewWindow) setMessage('浏览器阻止了新窗口，请允许弹出窗口后重试。', 'is-error');
+    if (/\.(md|html?)$/i.test(name)) {
+      const page = /\.md$/i.test(name) ? 'markdown' : 'html';
+      window.open(`/${page}.html?path=${enc(row.dataset.path)}`, '_blank', 'noopener,noreferrer');
       return;
     }
     show(row.dataset.path, name);

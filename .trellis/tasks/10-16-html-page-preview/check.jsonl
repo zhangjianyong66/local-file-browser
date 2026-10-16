@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/file-browser-contract.md", "reason": "认证、路径边界和文件响应契约"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Go 检查与测试要求"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误响应约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "原生 DOM 组件约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "目录和预览状态"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端安全与验证"}
+{"file": ".trellis/spec/guides/index.md", "reason": "跨层与复用检查"}
