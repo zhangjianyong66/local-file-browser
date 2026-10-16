@@ -32,3 +32,11 @@
 ## 验证边界
 
 没有独立复测 HTML 自行导航的浏览器场景；代码检查确认包装 iframe 的 sandbox 属性不会被页面代码撤销，资源响应也带独立 CSP sandbox。Markdown 点击、目录历史与请求顺序等兼容性由已有前端与 Go 回归测试覆盖。
+
+## 本地部署验收
+
+用户追加授权后，代码提交为 `1ca91b6`，重新编译并通过用户级 systemd 更新 `local-file-browser.service`。运行进程与新二进制 SHA-256 一致；生产配置未修改。
+
+实际服务验证登录、目录列表、HTML 包装页和预览接口、隔离响应头、静态脚本、下载、注销后令牌失效，全部通过。安全 Cookie 的本地 HTTP 校验首次未携带凭据触发回滚；显式携带本次登录凭据后重新部署验证成功，保留 Secure 配置。
+
+原二进制备份：`/tmp/local-file-browser-deploy-oda8m84k/local-file-browser.previous`。该目录位于临时存储，清理临时目录前可用于恢复二进制，然后执行 `systemctl --user restart local-file-browser.service`。
