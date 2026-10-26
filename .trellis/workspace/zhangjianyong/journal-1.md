@@ -333,3 +333,33 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 13: 文件列表排序及本机部署
+<!-- trellis-session: v=2 fp=77efd1c42e6829d6 -->
+
+**Date**: 2026-10-26
+**Task**: 文件列表排序及本机部署
+**Branch**: `feat/file-list-sorting`
+
+### Summary
+
+实现默认修改时间降序及六种排序模式，目录优先；通过独立审查后提交并部署本机用户级服务。
+
+### Main Changes
+
+- 本机 127.0.0.1:8080 已运行新版本，旧程序备份保留于 ~/.local/state/local-file-browser/backups/local-file-browser-before-sorting-908431d。临时 18080 预览已停止。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `908431d` | feat(web): 增加文件排序并默认最新修改优先 |
+
+### Testing
+
+- [OK] 15 项 Node 回归、Go 竞态测试、go vet、构建通过；Chrome 六种排序和 1440/375/320 像素布局验证通过；部署后登录、列表及静态资源验证通过。
+
+### Status
+
+[OK] **Completed**

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
-- **Last Active**: 2026-10-16
+- **Total Sessions**: 13
+- **Last Active**: 2026-10-26
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~335 | Active |
+| `journal-1.md` | ~365 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-10-26 | 文件列表排序及本机部署 | `908431d` | `feat/file-list-sorting` |
 | 12 | 2026-10-16 | HTML 网页预览实现与本地部署 | `1ca91b6` | `feat/html-page-preview` |
 | 11 | 2026-09-30 | 目录路由优化与本地部署 | `c297e00` | `feat/web-directory-routing` |
 | 10 | 2026-09-21 | 清理 Git 忽略项 | `4600d08` | `main` |
