@@ -9,6 +9,24 @@ clears selection; `show` fetches metadata and preview; successful uploads call
 `load(current)`. The URL is used for directory navigation, markdown previews, and download/media
 endpoints. Do not duplicate API data or retain stale entries after mutations.
 
+## Listing Sort State
+
+`currentEntries` holds only the current successful directory response; clear it
+when a load starts and replace it after the latest response succeeds. Disable
+`#sort-order` during loading and after failure so sorting cannot resurrect a
+previous directory or replace an error state.
+
+`sortMode` defaults to `modified-desc` on page load and survives directory
+navigation and upload refresh within the page. The six modes combine `name`,
+`size`, or `modified` with `asc` or `desc`. Sort a copy of entries for rendering,
+keeping directories first in both directions. In size mode, directories use
+name ascending; equal field values also use name ascending. Client-side name
+comparison uses the Chinese locale with a deterministic string fallback.
+
+Sorting rerenders the list without clearing selection, changing the preview,
+or fetching the directory again. The API retains its directories-first,
+name-ascending order; the browser applies the selected display order.
+
 ## Directory Routing Contract
 
 ### 1. Scope / Trigger

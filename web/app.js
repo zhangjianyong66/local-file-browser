@@ -6,6 +6,8 @@ let target = new URL(location.href).searchParams.get('path') || '';
 let directoryRequest = 0;
 let previewRequest = 0;
 let directoryReady = false;
+let currentEntries = [];
+let sortMode = 'modified-desc';
 function directoryURL(path) {
   const url = new URL('/', location.origin);
   if (path) url.searchParams.set('path', path);
@@ -52,7 +54,21 @@ function breadcrumbs(path = current) {
 function showListLoading() {
   q('#listing').innerHTML = '<div class="loading-state"><span class="spinner" aria-hidden="true"></span><span>正在读取目录…</span></div>';
 }
+function sortedEntries(entries) {
+  const [field, order] = sortMode.split('-');
+  const direction = order === 'asc' ? 1 : -1;
+  const byName = (a, b) => a.name.localeCompare(b.name, 'zh-CN') || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  return [...entries].sort((a, b) => {
+    if (a.dir !== b.dir) return a.dir ? -1 : 1;
+    if (field === 'size' && a.dir) return byName(a, b);
+    const comparison = field === 'name' ? byName(a, b)
+      : field === 'size' ? a.size - b.size
+      : new Date(a.modified).getTime() - new Date(b.modified).getTime();
+    return comparison * direction || byName(a, b);
+  });
+}
 function renderList(entries) {
+  entries = sortedEntries(entries);
   q('#entry-count').textContent = `${entries.length} 项`;
   if (!entries.length) { q('#listing').innerHTML = '<div class="empty-list"><strong>此目录为空</strong><span>可以从右上角上传文件。</span></div>'; return; }
   q('#listing').innerHTML = entries.map((entry) => `<a class="file-row ${selected === entry.path ? 'is-selected' : ''}" href="#" data-path="${esc(entry.path)}" data-dir="${entry.dir}" aria-current="${selected === entry.path ? 'true' : 'false'}"><span class="file-name">${icon(entry.dir ? 'folder' : 'file')}<span class="file-label">${esc(entry.name)}</span></span><span class="file-size">${entry.dir ? '—' : fmtBytes(entry.size)}</span><span class="file-date">${fmtDate(entry.modified)}</span><span class="file-mime">${esc(entry.dir ? '目录' : entry.mime)}</span></a>`).join('');
@@ -73,6 +89,8 @@ async function load(path = '', navigation = 'push') {
   ++previewRequest;
   target = path;
   directoryReady = false;
+  currentEntries = [];
+  q('#sort-order').disabled = true;
   selected = ''; selectedName = '';
   q('#upload').disabled = true;
   q('#entry-count').textContent = '';
@@ -92,9 +110,11 @@ async function load(path = '', navigation = 'push') {
     if (navigation === 'push' && previous !== url) history.pushState(null, '', url);
     else history.replaceState(null, '', url);
     directoryReady = true;
+    currentEntries = data.entries;
+    q('#sort-order').disabled = false;
     q('#upload').disabled = isUploading;
     breadcrumbs();
-    renderList(data.entries);
+    renderList(currentEntries);
     q('#details').innerHTML = '<div class="details-empty"><div class="empty-icon" aria-hidden="true">◌</div><h2 id="details-title">选择一个文件</h2><p>从左侧目录选择文件，在这里查看信息和预览。</p></div>';
     setMessage('');
   } catch (error) {
@@ -132,6 +152,11 @@ async function show(path, name) {
     q('#details-panel').focus({preventScroll: true});
   } catch (error) { if (request !== previewRequest) return; q('#details').innerHTML = `<div class="error-state"><strong>文件加载失败</strong><span>${esc(error.message)}</span><button class="button button-secondary" type="button" id="retry-file">重试</button></div>`; q('#retry-file')?.addEventListener('click', () => show(path, selectedName)); setMessage(error.message, 'is-error'); }
 }
+q('#sort-order').addEventListener('change', (event) => {
+  if (!directoryReady) return;
+  sortMode = event.target.value;
+  renderList(currentEntries);
+});
 q('#upload').addEventListener('change', async (event) => {
   const file = event.target.files[0];
   if (!file || isUploading || !directoryReady) return;

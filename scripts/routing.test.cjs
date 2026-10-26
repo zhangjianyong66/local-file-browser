@@ -42,6 +42,97 @@ function harness(source = app, entry = '/') {
   };
 }
 
+const sortingEntries = [
+  { name: 'b.txt', path: 'b.txt', dir: false, size: 10, modified: '2026-10-20T10:00:00Z' },
+  { name: 'a-dir', path: 'a-dir', dir: true, size: 900, modified: '2026-10-20T10:00:00Z' },
+  { name: 'a.txt', path: 'a.txt', dir: false, size: 20, modified: '2026-10-22T10:00:00Z' },
+  { name: 'b-dir', path: 'b-dir', dir: true, size: 1, modified: '2026-10-22T10:00:00Z' },
+  { name: 'c.txt', path: 'c.txt', dir: false, size: 20, modified: '2026-10-22T10:00:00Z' },
+];
+const listingPaths = (h) => [...h.node('#listing').innerHTML.matchAll(/data-path="([^"]*)"/g)].map((match) => match[1]);
+function selectSort(h, value) {
+  h.node('#sort-order').value = value;
+  h.node('#sort-order').change({ target: h.node('#sort-order') });
+}
+
+test('default sorting puts newest files first beneath directories', async () => {
+  const h = harness();
+  assert.equal(h.node('#sort-order').disabled, true);
+  await h.respond(0, { path: '', entries: sortingEntries });
+  assert.deepEqual(listingPaths(h), ['b-dir', 'a-dir', 'a.txt', 'c.txt', 'b.txt']);
+  assert.equal(h.node('#sort-order').disabled, false);
+});
+
+test('all sorting options retain directory priority and stable name tie breaks', async () => {
+  const h = harness();
+  await h.respond(0, { path: '', entries: sortingEntries });
+  const cases = {
+    'name-asc': ['a-dir', 'b-dir', 'a.txt', 'b.txt', 'c.txt'],
+    'name-desc': ['b-dir', 'a-dir', 'c.txt', 'b.txt', 'a.txt'],
+    'size-asc': ['a-dir', 'b-dir', 'b.txt', 'a.txt', 'c.txt'],
+    'size-desc': ['a-dir', 'b-dir', 'a.txt', 'c.txt', 'b.txt'],
+    'modified-asc': ['a-dir', 'b-dir', 'b.txt', 'a.txt', 'c.txt'],
+    'modified-desc': ['b-dir', 'a-dir', 'a.txt', 'c.txt', 'b.txt'],
+  };
+  for (const [mode, expected] of Object.entries(cases)) {
+    selectSort(h, mode);
+    assert.deepEqual(listingPaths(h), expected, mode);
+  }
+  assert.deepEqual(sortingEntries.map((entry) => entry.path), ['b.txt', 'a-dir', 'a.txt', 'b-dir', 'c.txt'], 'sorting must not mutate API entries');
+});
+
+test('sorting preserves selected file and preview without requesting data', async () => {
+  const h = harness();
+  await h.respond(0, { path: '', entries: sortingEntries });
+  h.run("show('a.txt', 'a.txt')");
+  await h.respond(1, { name: 'a.txt', path: 'a.txt', preview: 'image', size: 20 });
+  const preview = h.node('#details').innerHTML;
+  selectSort(h, 'name-desc');
+  assert.equal(h.run('selected'), 'a.txt');
+  assert.equal(h.node('#details').innerHTML, preview);
+  assert.match(h.node('#listing').innerHTML, /class="file-row is-selected"[^>]*data-path="a.txt"[^>]*aria-current="true"/);
+  assert.equal(h.pending.length, 2);
+});
+
+test('sort choice survives navigation, history traversal and upload refresh but resets on reload', async () => {
+  const h = harness();
+  await h.respond(0, { path: '', entries: sortingEntries });
+  selectSort(h, 'size-asc');
+  h.run("load('docs')");
+  assert.equal(h.node('#sort-order').disabled, true);
+  await h.respond(1, { path: 'docs', entries: sortingEntries });
+  assert.deepEqual(listingPaths(h), ['a-dir', 'b-dir', 'b.txt', 'a.txt', 'c.txt']);
+  h.location.href = 'http://localhost/';
+  h.events.popstate();
+  await h.respond(2, { path: '', entries: sortingEntries });
+  assert.equal(h.node('#sort-order').value, 'size-asc');
+  const input = h.node('#upload');
+  input.files = [{ name: 'new.txt' }];
+  const uploading = input.change({ target: input });
+  await h.respond(3, {});
+  const newEntry = { name: 'new.txt', path: 'new.txt', dir: false, size: 5, modified: '2026-10-25T10:00:00Z' };
+  await h.respond(4, { path: '', entries: [...sortingEntries, newEntry] });
+  await uploading;
+  assert.deepEqual(listingPaths(h), ['a-dir', 'b-dir', 'new.txt', 'b.txt', 'a.txt', 'c.txt']);
+  assert.equal(h.node('#sort-order').value, 'size-asc');
+  const reloaded = harness();
+  await reloaded.respond(0, { path: '', entries: [...sortingEntries, newEntry] });
+  assert.deepEqual(listingPaths(reloaded), ['b-dir', 'a-dir', 'new.txt', 'a.txt', 'c.txt', 'b.txt']);
+});
+
+test('sorting cannot restore an old directory while loading or after an error', async () => {
+  const h = harness();
+  await h.respond(0, { path: '', entries: sortingEntries });
+  h.run("load('missing')");
+  selectSort(h, 'name-desc');
+  assert.match(h.node('#listing').innerHTML, /正在读取目录/);
+  await h.respond(1, { error: 'missing directory' }, 404);
+  selectSort(h, 'size-desc');
+  assert.match(h.node('#listing').innerHTML, /目录读取失败/);
+  assert.equal(h.node('#sort-order').disabled, true);
+  assert.equal(h.run('currentEntries.length'), 0);
+});
+
 test('initial URL restores special characters and clears selection', async () => {
   const path = '中文 空格#%/子目录';
   const h = harness(app, `/?${new URLSearchParams({ path })}`);

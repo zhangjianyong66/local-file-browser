@@ -29,9 +29,16 @@
     </section>
     <div id="workspace" class="workspace">
       <section id="listing-panel" class="listing-panel" aria-labelledby="listing-title">
-        <div class="section-heading">
+        <div class="section-heading listing-heading">
           <div><h2 id="listing-title">当前目录</h2><span id="entry-count" class="count"></span></div>
-          <span class="sort-hint">目录优先 · 名称排序</span>
+          <select id="sort-order" class="sort-select" aria-label="文件排序" title="文件排序" disabled>
+            <option value="modified-desc" selected>修改时间：最新优先</option>
+            <option value="modified-asc">修改时间：最早优先</option>
+            <option value="name-asc">名称：升序</option>
+            <option value="name-desc">名称：降序</option>
+            <option value="size-asc">大小：从小到大</option>
+            <option value="size-desc">大小：从大到小</option>
+          </select>
         </div>
         <div class="list-head" aria-hidden="true"><span>名称</span><span>大小</span><span>修改时间</span><span>类型</span></div>
         <div id="listing" class="file-list" aria-live="polite"></div>
