@@ -1,0 +1,8 @@
+{"file":".trellis/tasks/10-29-deep-file-discovery/prd.md","reason":"逐条核对 R1-R8 和 AC1-AC7"}
+{"file":".trellis/tasks/10-29-deep-file-discovery/design.md","reason":"检查匹配边界、遍历上限、部分结果和竞态处理"}
+{"file":".trellis/tasks/10-29-deep-file-discovery/implement.md","reason":"检查验证步骤与回滚范围"}
+{"file":".trellis/spec/backend/file-browser-contract.md","reason":"检查新接口鉴权、越界、符号链接和预览兼容"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"运行 Go 必要检查与边界测试"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"检查搜索与目录导航、排序、上传和过期响应交互"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"检查 DOM 安全、键盘控件和预览复用"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查桌面手机布局及现有工作流回归"}

@@ -17,20 +17,20 @@ function harness(source = app, entry = '/') {
   };
   const node = (selector) => {
     if (!nodes.has(selector)) nodes.set(selector, {
-      innerHTML: '', textContent: '', classList: { add() {}, remove() {}, toggle() {} },
+      innerHTML: '', textContent: '', value: '', classList: { add() {}, remove() {}, toggle() {} },
       addEventListener(type, listener) { this[type] = listener; },
       querySelectorAll() { return []; }, setAttribute() {}, removeAttribute() {}, focus() {},
     });
     return nodes.get(selector);
   };
   const context = vm.createContext({
-    URL, location, document: { querySelector: node },
+    URL, URLSearchParams, AbortController, location, document: { querySelector: node },
     FormData: class { append() {} },
     window: { open(...args) { opened.push(args); return null; }, addEventListener(type, listener) { events[type] = listener; } },
     history: Object.fromEntries(['pushState', 'replaceState'].map((method) => [method, (_, __, value) => {
       historyCalls.push([method, value]); location.href = new URL(value, location.origin).href;
     }])),
-    fetch: (url) => new Promise((resolve) => pending.push({ url, resolve })),
+    fetch: (url, options) => new Promise((resolve) => pending.push({ url, options, resolve })),
   });
   vm.runInContext(source, context);
   return { context, node, pending, events, historyCalls, location, opened,
@@ -285,4 +285,134 @@ test('HTML and Markdown clicks open isolated new windows with encoded paths', as
     assert.equal(h.pending.length, 1, 'click must not fetch text preview');
     assert.equal(h.node('#message').textContent, '', 'noopener returning null is not a blocked popup');
   }
+});
+
+const searchEntry = (path = 'project/docs/prompt-zh.txt') => ({ name: path.split('/').pop(), path, dir: false, size: 14, modified: '2026-10-29T01:00:00Z' });
+const searchResponse = (entries = [searchEntry()], extra = {}) => ({entries, truncated: false, skipped: 0, reason: '', ...extra});
+function submitSearch(h, query) {
+  h.node('#search-query').value = query;
+  h.node('#search-form').submit({preventDefault() {}});
+}
+
+test('search submits encoded paths, shows full locations, and restores directory sort', async () => {
+  const h = harness(app, '/?path=project');
+  assert.equal(h.node('#search-submit').disabled, true);
+  await h.respond(0, {path:'project',entries:sortingEntries});
+  selectSort(h, 'name-asc');
+  const query = 'docs/中文 空格#%/prompt-zh.txt';
+  submitSearch(h, ` ${query} `);
+  const url = new URL(h.pending[1].url,h.location.origin);
+  assert.equal(url.pathname,'/api/search');
+  assert.equal(url.searchParams.get('q'),query);
+  assert.equal(url.searchParams.get('path'),'');
+  assert.equal(h.node('#sort-order').disabled,true);
+  await h.respond(1,searchResponse([searchEntry(`project/${query}`)]));
+  assert.match(h.node('#listing').innerHTML, /project\/docs\/中文 空格#%\/prompt-zh.txt/);
+  assert.match(h.node('#listing').innerHTML, /data-parent="project\/docs\/中文 空格#%"/);
+  selectSort(h,'size-desc');
+  assert.equal(h.run('sortMode'),'name-asc','disabled sort cannot replace search results');
+  h.node('#search-clear').click();
+  assert.deepEqual(listingPaths(h),['a-dir','b-dir','a.txt','b.txt','c.txt']);
+  assert.equal(h.node('#sort-order').disabled,false);
+  assert.equal(h.node('#search-query').value,'');
+  assert.equal(h.run('searchActive'),false);
+});
+
+test('new search, scope changes, clear and navigation invalidate late search responses', async () => {
+  const h = harness(app, '/?path=project');
+  await h.respond(0,{path:'project',entries:sortingEntries});
+  submitSearch(h,'old');
+  submitSearch(h,'new');
+  assert.equal(h.pending[1].options.signal.aborted,true);
+  await h.respond(2,searchResponse([searchEntry('project/new.txt')]));
+  await h.respond(1,searchResponse([searchEntry('project/old.txt')]));
+  assert.match(h.node('#listing').innerHTML,/new.txt/);
+  assert.doesNotMatch(h.node('#listing').innerHTML,/old.txt/);
+  h.node('#search-scope').value = 'current';
+  h.node('#search-scope').change();
+  assert.equal(new URL(h.pending[3].url,h.location.origin).searchParams.get('path'),'project');
+  h.node('#search-clear').click();
+  await h.respond(3,searchResponse());
+  assert.deepEqual(listingPaths(h),['b-dir','a-dir','a.txt','c.txt','b.txt']);
+  submitSearch(h,'another');
+  h.run("load('elsewhere')");
+  await h.respond(5,{path:'elsewhere',entries:[]});
+  await h.respond(4,searchResponse());
+  assert.match(h.node('#listing').innerHTML,/此目录为空/);
+  assert.equal(h.run('current'),'elsewhere');
+  assert.equal(h.run('searchActive'),false);
+});
+
+test('search ignores obsolete 401 and preview responses but current 401 returns to directory', async () => {
+  const h = harness(app, '/?path=project');
+  await h.respond(0,{path:'project',entries:[]});
+  h.run("show('project/old.txt','old.txt')");
+  submitSearch(h,'old');
+  await h.respond(1,{},401);
+  assert.equal(h.location.redirect,undefined);
+  submitSearch(h,'new');
+  await h.respond(2,{},401);
+  assert.equal(h.location.redirect,undefined);
+  await h.respond(3,{},401);
+  const loginURL = new URL(h.location.redirect,h.location.origin);
+  assert.equal(loginURL.pathname,'/login.html');
+  assert.equal(loginURL.searchParams.get('return'),'/?path=project');
+});
+
+test('search distinguishes complete empty, partial results, failure retry and directory errors', async () => {
+  const h = harness();
+  await h.respond(0,{path:'',entries:[]});
+  submitSearch(h,'prompt');
+  await h.respond(1,searchResponse([]));
+  assert.match(h.node('#listing').innerHTML,/没有匹配的文件/);
+  submitSearch(h,'prompt');
+  await h.respond(2,searchResponse([],{truncated:true,reason:'scan_limit',skipped:2}));
+  assert.match(h.node('#listing').innerHTML,/扫描数量上限/);
+  assert.match(h.node('#listing').innerHTML,/暂未找到/);
+  assert.match(h.node('#listing').innerHTML,/2 个文件或目录无法读取/);
+  assert.match(h.node('#entry-count').textContent,/部分结果/);
+  submitSearch(h,'prompt');
+  await h.respond(3,{error:'try again'},500);
+  assert.match(h.node('#listing').innerHTML,/搜索失败/);
+  h.node('#retry-search').click();
+  await h.respond(4,searchResponse());
+  assert.match(h.node('#listing').innerHTML,/prompt-zh.txt/);
+  h.run("load('missing')");
+  await h.respond(5,{error:'missing'},404);
+  assert.equal(h.node('#search-submit').disabled,true);
+  submitSearch(h,'ignored');
+  assert.equal(h.pending.length,6,'failed directory must not use previous scope');
+});
+
+test('search result actions reuse preview and enter parent directory independently', async () => {
+  const h = harness();
+  await h.respond(0,{path:'',entries:[]});
+  const row = {dataset:{path:'project/docs/PAGE.HTML',name:'PAGE.HTML'},addEventListener(_,listener){this.click=listener;}};
+  const parent = {dataset:{parent:'project/docs'},addEventListener(_,listener){this.click=listener;}};
+  h.node('#listing').querySelectorAll = (selector) => selector === '.file-row' ? [row] : selector === '.open-parent' ? [parent] : [];
+  submitSearch(h,'PAGE');
+  await h.respond(1,searchResponse([searchEntry(row.dataset.path)]));
+  row.click({preventDefault(){}});
+  assert.equal(h.opened.length,1);
+  assert.equal(new URL(h.opened[0][0],h.location.origin).pathname,'/html.html');
+  assert.equal(h.opened[0][2],'noopener,noreferrer');
+  parent.click();
+  assert.equal(h.pending[2].url,'/api/list?path=project%2Fdocs');
+  assert.equal(h.run('searchActive'),false);
+  await h.respond(2,{path:'project/docs',entries:[]});
+});
+
+test('upload success exits search and refreshes its original directory', async () => {
+  const h = harness(app,'/?path=project');
+  await h.respond(0,{path:'project',entries:[]});
+  submitSearch(h,'prompt');
+  await h.respond(1,searchResponse());
+  const input = h.node('#upload'); input.files=[{name:'uploaded.txt'}];
+  const uploading = input.change({target:input});
+  assert.equal(h.pending[2].url,'/api/upload?path=project');
+  await h.respond(2,{});
+  await h.respond(3,{path:'project',entries:[searchEntry('project/uploaded.txt')]});
+  await uploading;
+  assert.equal(h.run('searchActive'),false);
+  assert.match(h.node('#listing').innerHTML,/uploaded.txt/);
 });
