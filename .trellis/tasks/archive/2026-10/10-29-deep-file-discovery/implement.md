@@ -42,5 +42,12 @@
 - [x] 桌面 1440px 与手机 390px 截图验证；320px 无横向溢出。手机端 16 项交互检查覆盖匹配、预览、目录跳转、范围切换、特殊路径、上传及冲突、错误重试和独立预览路由；登录退出另行验证通过。
 - [x] 实际文件库示例查询约 1.7 秒找到 `project/xiyou-idle/docs/design-drafts/wukong-v14-attack-grok-handoff-v3/prompt-zh.txt`；全库达到扫描预算，正确返回部分结果状态。
 - [x] 使用 trellis-update-spec 同步后端搜索契约与前端状态规范。
-- [x] 独立预览服务运行在 `http://127.0.0.1:8081`，复用现有配置和访问密码；原服务未改动。
-- [ ] 等待用户按项目提交流程确认工作提交，之后再归档和记录会话。
+- [x] 独立预览服务完成验证；正式部署后关闭临时预览。
+- [x] 用户确认提交及本地部署，工作提交为 `e55f95f`。
+- [x] 备份旧程序后构建、原子替换并重启用户级 `local-file-browser.service`。正式 `http://127.0.0.1:8080` 上的登录、首页搜索控件、列表、示例路径搜索及预览验证通过；服务状态 active/running。
+
+## 本地部署与回滚
+
+- 运行程序：项目根目录 `local-file-browser`；配置保持不变。
+- 旧程序备份：`/home/zhangjianyong/.local/state/local-file-browser/backups/pre-search-e55f95f-KghPgS/local-file-browser`，部署前已校验与原程序 SHA-256 一致。
+- 如需回滚，将备份先复制到项目中的临时文件，再原子替换 `local-file-browser`，执行 `systemctl --user restart local-file-browser.service`，检查状态及列表/预览接口。配置和用户文件不需要回滚。
