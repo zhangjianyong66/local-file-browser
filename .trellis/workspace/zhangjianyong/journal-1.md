@@ -363,3 +363,39 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 14: 跨目录文件搜索及本地部署
+<!-- trellis-session: v=2 fp=8f8df26a3ed1bef0 -->
+
+**Date**: 2026-10-29
+**Task**: 跨目录文件搜索及本地部署
+**Branch**: `feat/deep-file-discovery`
+
+### Summary
+
+实现文件名及路径后缀搜索，完成质量验证并部署到本地正式服务。
+
+### Main Changes
+
+- 支持全库/当前目录搜索、完整路径结果、预览及打开所在目录；采用有预算的广度优先扫描与安全路径探测。
+- 旧程序已备份至 ~/.local/state/local-file-browser/backups/pre-search-e55f95f-KghPgS/local-file-browser；替换构建程序后重启 local-file-browser.service，关闭8081临时预览。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e55f95f` | feat(search): 支持跨目录文件名及路径搜索 |
+
+### Testing
+
+- [OK] Go race/vet/build、21项Node测试、桌面及手机浏览器检查通过。
+- [OK] 8080正式服务登录、首页搜索控件、列表、示例路径搜索和预览均返回200，服务active/running。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 大型文件库出现部分结果提示时，可切换当前项目目录缩小范围。
