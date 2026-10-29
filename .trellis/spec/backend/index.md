@@ -20,6 +20,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | Active |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | Active |
 | [File Browser Contract](./file-browser-contract.md) | Authenticated file API and root-bound file-system safety | Active |
+| [File Search Contract](./file-search-contract.md) | Filename/path search, budgets and partial results | Active |
 
 ---
 

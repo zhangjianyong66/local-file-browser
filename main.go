@@ -229,6 +229,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/api/login", s.login)
 	mux.HandleFunc("/api/logout", s.logout)
 	mux.HandleFunc("/api/list", s.list)
+	mux.HandleFunc("/api/search", s.search)
 	mux.HandleFunc("/api/info", s.info)
 	mux.HandleFunc("/api/preview", s.preview)
 	mux.HandleFunc("/api/download", s.download)

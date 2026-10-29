@@ -86,3 +86,46 @@ return strings as redirect destinations.
 
 Correct: initialize from URLSearchParams, use the target directory for retry,
 and rebuild a validated same-origin directory URL before redirecting.
+
+## Search State Contract
+
+### 1. Scope / Trigger
+
+Apply when changing search forms, results, preview or directory/upload interactions.
+
+### 2. Signatures
+
+searchFiles(query) calls /api/search with URLSearchParams. clearSearch(restore) invalidates search and optionally restores the directory. openFile(path, name) owns shared preview routing.
+
+### 3. Contracts
+
+- Default scope is the entire library; current scope uses the successfully loaded directory. Disable search during pending/failed directory loads.
+- Submit with Enter/button; scope changes rerun the submitted query. Clear restores entries and sort mode. Active search disables directory sorting.
+- Use AbortController plus request versions. Only current responses can render or redirect to login. Navigation, history, clear, new searches and upload refresh invalidate old searches and relevant previews.
+- Escape full relative paths and metadata. File click reuses existing previews; a separate sibling button opens its parent directory and exits search.
+- Search is not stored in the URL; refresh and login return preserve only the directory. Uploads remain bound to their original directory and successful refresh exits search.
+- Distinguish loading, retryable failures, complete empty results and partial results. Never claim complete absence when truncated or skipped is nonzero. Wrap long paths and retain keyboard access on mobile.
+
+### 4. Validation / Error Matrix
+
+| Event | Behavior |
+| --- | --- |
+| Superseded response / 401 | Ignore rendering and redirect |
+| Clear/navigation | Invalidate pending search and preview |
+| Partial response | Visible warning even with zero matches |
+| API failure | Escaped error and retry submitted query |
+| Directory failure | Search and upload disabled |
+
+### 5. Good / Base / Bad Cases
+
+Good: clear restores the directory even after a late response. Base: search does not push history. Bad: sorting replaces active search results or errors.
+
+### 6. Tests Required
+
+Run node --test scripts/routing.test.cjs. Cover scope switching, late responses/401, clear, navigation, preview invalidation, upload refresh, retry and partial empty results. Check desktop/mobile preview and parent actions in a browser.
+
+### 7. Wrong vs Correct
+
+Wrong: rely only on aborting fetch or interpolate raw server paths.
+
+Correct: abort plus version guards, escape output, encode URL parameters and keep preview/parent controls independently accessible.

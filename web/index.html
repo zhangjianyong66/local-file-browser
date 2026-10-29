@@ -27,6 +27,12 @@
         <input id="upload" type="file">
       </label>
     </section>
+    <form id="search-form" class="search-bar" role="search" aria-label="文件搜索">
+      <label class="search-field" for="search-query"><span class="sr-only">文件名或相对路径</span><input id="search-query" type="search" placeholder="文件名或相对路径" autocomplete="off" maxlength="4096" disabled></label>
+      <select id="search-scope" aria-label="搜索范围" disabled><option value="all">整个文件库</option><option value="current">当前目录及子目录</option></select>
+      <button id="search-submit" class="button button-primary search-icon-button" type="submit" aria-label="搜索文件" title="搜索文件" disabled><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button id="search-clear" class="button button-secondary search-icon-button" type="button" aria-label="清除搜索" title="清除搜索" disabled><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg></button>
+    </form>
     <div id="workspace" class="workspace">
       <section id="listing-panel" class="listing-panel" aria-labelledby="listing-title">
         <div class="section-heading listing-heading">

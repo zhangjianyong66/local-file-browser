@@ -8,6 +8,10 @@ let previewRequest = 0;
 let directoryReady = false;
 let currentEntries = [];
 let sortMode = 'modified-desc';
+let searchRequest = 0;
+let searchController;
+let searchActive = false;
+let submittedQuery = '';
 function directoryURL(path) {
   const url = new URL('/', location.origin);
   if (path) url.searchParams.set('path', path);
@@ -54,6 +58,91 @@ function breadcrumbs(path = current) {
 function showListLoading() {
   q('#listing').innerHTML = '<div class="loading-state"><span class="spinner" aria-hidden="true"></span><span>正在读取目录…</span></div>';
 }
+function setSearchEnabled(enabled) {
+  ['#search-query', '#search-scope', '#search-submit'].forEach((selector) => { q(selector).disabled = !enabled; });
+}
+function resetDetails() {
+  ++previewRequest;
+  selected = ''; selectedName = '';
+  q('#details').innerHTML = '<div class="details-empty"><div class="empty-icon" aria-hidden="true">◌</div><h2 id="details-title">选择一个文件</h2></div>';
+  q('#workspace').classList.remove('mobile-detail');
+  q('#details-panel').classList.remove('mobile-active');
+}
+function invalidateSearch() {
+  ++searchRequest;
+  searchController?.abort();
+  searchController = undefined;
+}
+function clearSearch(restore = true) {
+  invalidateSearch();
+  searchActive = false;
+  submittedQuery = '';
+  q('#search-query').value = '';
+  q('#search-clear').disabled = true;
+  q('#listing-title').textContent = '当前目录';
+  q('#listing-panel').classList.remove('search-results');
+  q('#sort-order').disabled = !directoryReady;
+  if (restore && directoryReady) {
+    resetDetails();
+    renderList(currentEntries);
+    setMessage('');
+  }
+}
+function openFile(path, name) {
+  if (/\.(md|html?)$/i.test(name)) {
+    const page = /\.md$/i.test(name) ? 'markdown' : 'html';
+    window.open(`/${page}.html?path=${enc(path)}`, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  show(path, name);
+}
+function renderSearchResults(data) {
+  const incomplete = data.truncated || data.skipped > 0;
+  q('#entry-count').textContent = `${data.entries.length} 项${incomplete ? ' · 部分结果' : ''}`;
+  const reasons = {result_limit: '已达到结果数量上限', scan_limit: '已达到扫描数量上限', time_limit: '已达到搜索时间上限'};
+  const notices = [];
+  if (data.truncated) notices.push(`${reasons[data.reason] || '搜索未完成'}，请缩小搜索范围。`);
+  if (data.skipped > 0) notices.push(`有 ${data.skipped} 个文件或目录无法读取，结果可能不完整。`);
+  const notice = notices.length ? `<div class="search-notice" role="status">${esc(notices.join(' '))}</div>` : '';
+  if (!data.entries.length) {
+    q('#listing').innerHTML = `${notice}<div class="empty-list"><strong>${incomplete ? '本次搜索暂未找到匹配文件' : '没有匹配的文件'}</strong></div>`;
+    return;
+  }
+  q('#listing').innerHTML = notice + data.entries.map((entry) => `<div class="search-result"><a class="file-row" href="#" data-path="${esc(entry.path)}" data-name="${esc(entry.name)}" aria-current="false"><span class="search-result-name"><span class="file-name">${icon('file')}<span class="file-label">${esc(entry.name)}</span></span><span class="result-path">${esc(entry.path)}</span><span class="result-meta">${fmtBytes(entry.size)} · ${fmtDate(entry.modified)}</span></span></a><button class="button button-ghost open-parent" type="button" data-parent="${esc(entry.path.split('/').slice(0, -1).join('/'))}" title="打开所在目录" aria-label="打开 ${esc(entry.name)} 所在目录">${icon('folder')}</button></div>`).join('');
+  q('#listing').querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', (event) => {
+    event.preventDefault(); openFile(row.dataset.path, row.dataset.name);
+  }));
+  q('#listing').querySelectorAll('.open-parent').forEach((button) => button.addEventListener('click', () => load(button.dataset.parent)));
+}
+async function searchFiles(query = q('#search-query').value.trim()) {
+  if (!directoryReady) return;
+  if (!query) { clearSearch(); return; }
+  invalidateSearch();
+  const request = searchRequest;
+  searchController = new AbortController();
+  const controller = searchController;
+  submittedQuery = query;
+  searchActive = true;
+  q('#search-clear').disabled = false;
+  q('#sort-order').disabled = true;
+  q('#listing-title').textContent = '搜索结果';
+  q('#listing-panel').classList.add('search-results');
+  q('#entry-count').textContent = '';
+  resetDetails();
+  setMessage('');
+  q('#listing').innerHTML = '<div class="loading-state"><span class="spinner" aria-hidden="true"></span><span>正在搜索文件…</span></div>';
+  const scope = q('#search-scope').value === 'current' ? current : '';
+  const params = new URLSearchParams({q: query, path: scope});
+  try {
+    const data = await api(`/api/search?${params}`, {signal: controller.signal}, () => request === searchRequest);
+    if (request !== searchRequest) return;
+    renderSearchResults(data);
+  } catch (error) {
+    if (request !== searchRequest || error.name === 'AbortError') return;
+    q('#listing').innerHTML = `<div class="error-state"><strong>搜索失败</strong><span>${esc(error.message)}</span><button class="button button-secondary" type="button" id="retry-search">重试</button></div>`;
+    q('#retry-search').addEventListener('click', () => searchFiles(submittedQuery));
+  }
+}
 function sortedEntries(entries) {
   const [field, order] = sortMode.split('-');
   const direction = order === 'asc' ? 1 : -1;
@@ -76,15 +165,12 @@ function renderList(entries) {
     event.preventDefault();
     if (row.dataset.dir === 'true') { load(row.dataset.path); return; }
     const name = row.querySelector('.file-label').textContent;
-    if (/\.(md|html?)$/i.test(name)) {
-      const page = /\.md$/i.test(name) ? 'markdown' : 'html';
-      window.open(`/${page}.html?path=${enc(row.dataset.path)}`, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    show(row.dataset.path, name);
+    openFile(row.dataset.path, name);
   }));
 }
 async function load(path = '', navigation = 'push') {
+  clearSearch(false);
+  setSearchEnabled(false);
   const request = ++directoryRequest;
   ++previewRequest;
   target = path;
@@ -110,6 +196,7 @@ async function load(path = '', navigation = 'push') {
     if (navigation === 'push' && previous !== url) history.pushState(null, '', url);
     else history.replaceState(null, '', url);
     directoryReady = true;
+    setSearchEnabled(true);
     currentEntries = data.entries;
     q('#sort-order').disabled = false;
     q('#upload').disabled = isUploading;
@@ -136,7 +223,7 @@ async function show(path, name) {
   try {
     const data = await api(`/api/info?path=${enc(path)}`, undefined, () => request === previewRequest);
     if (request !== previewRequest) return;
-    let html = `<div class="detail-header"><button class="back-button" id="back-to-list" type="button">${icon('back')}<span>返回目录</span></button><div><p class="eyebrow">文件详情</p><h2 id="details-title">${esc(data.name)}</h2></div></div><div class="file-meta"><div><span>位置</span><strong>${esc(data.path || '根目录')}</strong></div><div><span>大小</span><strong>${fmtBytes(data.size)}</strong></div><div><span>修改时间</span><strong>${fmtDate(data.modified)}</strong></div><div><span>类型</span><strong>${esc(data.mime)}</strong></div></div><a class="button button-secondary download-button" href="/api/download?path=${enc(path)}">↓ <span>下载文件</span></a><div class="preview-area">`;
+    let html = `<div class="detail-header"><button class="back-button" id="back-to-list" type="button">${icon('back')}<span>${searchActive ? '返回结果' : '返回目录'}</span></button><div><p class="eyebrow">文件详情</p><h2 id="details-title">${esc(data.name)}</h2></div></div><div class="file-meta"><div><span>位置</span><strong>${esc(data.path || '根目录')}</strong></div><div><span>大小</span><strong>${fmtBytes(data.size)}</strong></div><div><span>修改时间</span><strong>${fmtDate(data.modified)}</strong></div><div><span>类型</span><strong>${esc(data.mime)}</strong></div></div><a class="button button-secondary download-button" href="/api/download?path=${enc(path)}">↓ <span>下载文件</span></a><div class="preview-area">`;
     if (data.preview === 'text' || data.preview === 'markdown') {
       const preview = await api(`/api/preview?path=${enc(path)}`, undefined, () => request === previewRequest);
       if (request !== previewRequest) return;
@@ -153,10 +240,17 @@ async function show(path, name) {
   } catch (error) { if (request !== previewRequest) return; q('#details').innerHTML = `<div class="error-state"><strong>文件加载失败</strong><span>${esc(error.message)}</span><button class="button button-secondary" type="button" id="retry-file">重试</button></div>`; q('#retry-file')?.addEventListener('click', () => show(path, selectedName)); setMessage(error.message, 'is-error'); }
 }
 q('#sort-order').addEventListener('change', (event) => {
-  if (!directoryReady) return;
+  if (!directoryReady || searchActive) return;
   sortMode = event.target.value;
   renderList(currentEntries);
 });
+q('#search-form').addEventListener('submit', (event) => { event.preventDefault(); searchFiles(); });
+q('#search-clear').addEventListener('click', () => { clearSearch(); q('#search-query').focus(); });
+q('#search-query').addEventListener('input', () => {
+  q('#search-clear').disabled = !q('#search-query').value && !searchActive;
+  if (!q('#search-query').value.trim() && searchActive) clearSearch();
+});
+q('#search-scope').addEventListener('change', () => { if (submittedQuery) searchFiles(submittedQuery); });
 q('#upload').addEventListener('change', async (event) => {
   const file = event.target.files[0];
   if (!file || isUploading || !directoryReady) return;
